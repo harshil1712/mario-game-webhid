@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<head>
+    <title>WebHID Demo</title>
+    <style>
+        html, body{
+    height: 100%;
+    width:100%;
+    overflow: hidden;
+    margin: 0;
+  }
+  
+  .grass, .sky, .road{
+    position: relative;
+  }
+  
+  .sky{
+    height: 35vh;
+    background: skyblue;
+  }
+  
+  .grass{
+    height: 25vh;
+    background: seagreen;
+  }
+  
+  .road{
+    height: 40vh;
+    background: dimgrey;
+    box-sizing: border-box;
+    border-top: 10px solid grey;
+    border-bottom: 10px solid grey;
+    width: 100%;
+  }
+  
+  .lines{
+    box-sizing: border-box;
+    border: 5px dashed #ffffff;
+    height: 0px;
+    width: 100%;
+    position: absolute;
+    top: 45%;
+  }
+  
+  #mario{
+    position:absolute;
+    top:-40px;
+    left:0px;
+  }
+  .bomb{
+    width: 25px;
+    height: 25px;
+    border-radius: 50%;
+    background-color: red;
+    opacity: 0;
+    position: absolute;
+    transition: all 2s linear;
+}
+#game {
+    display: none;
+}
+    </style>
+</head>
+
+<body>
+    <button id="btn" onclick="connectController()">
+        Connect
+    </button>
+    <div id="game">
+        <div class="sky"></div>
+        <div class="grass"></div>
+        <div class="road">
+        <div class="lines"></div>
+        <img
+            src="https://github.com/iamshaunjp/css-animations-playlist/blob/master/mario-examples/img/mario.png?raw=true"
+            id="mario"
+        />
+        </div>
+    </div>
+    <script>
+        const mario = document.getElementById('mario')
+        const cssStyle = window.getComputedStyle(mario)
+        let maxWidth;
+        let state = {
+            axes : {
+                leftStickX: 0,
+                leftStickY: 0,
+                rightStickX: 0,
+                rightStickY: 0
+            },
+            buttons: {
+                triangle: false,
+                circle: false,
+                cross: false,
+                square: false
+            }
+        }
+        async function connectController() {
+            if(window.navigator && window.navigator.hid) {
+                const devices = await window.navigator.hid.requestDevice({filters: [
+                    { vendorId: 0x054c, productId: 0x0ce6 }
+                ]})
+                const device = await devices[0]
+                if(device) {
+                    document.getElementById('btn').style.display = 'none';
+                    document.getElementById('game').style.display = 'block';
+                    console.log(device)
+                }
+                await device.open();
+                device.oninputreport = async (e) => {
+                    const {data, reportId} = await e;
+                    if(reportId === 0x01) {
+                        const buttons = data.getUint8(7)
+                        state.axes.leftStickX = normalizeThumbStickAxis(data.getUint8(0));
+                        // leftStickY = data.getUint8(1);
+		                // rightStickX = data.getUint8(2);
+		                state.axes.rightStickY = normalizeThumbStickAxis(data.getUint8(3));
+                        state.buttons.triangle = !!(buttons & (1 << 7))
+                        state.buttons.circle = !!(buttons & (1 << 6))
+                        state.buttons.cross = !!(buttons & (1 << 5))
+                        state.buttons.square = !!(buttons & (1 << 4))
+                    }
+                    await updatePosition(state.axes)
+                    await shoot(state.buttons)
+                }
+            }
+            
+            console.log('Connected')
+        }
+        function updatePosition({leftStickX, rightStickY}) {
+            let previousX = cssStyle.getPropertyValue('left')
+            let previousY = cssStyle.getPropertyValue('top')
+            maxWidth = window.innerWidth;
+            if(leftStickX == 1) {
+                if(previousX.replace(/px/g,'')<=(maxWidth)) {
+                    mario.style.left= `calc(${previousX} + 2px)`
+                }
+                if(previousX.replace(/px/g,'')>(maxWidth)) {
+                    mario.style.left= `calc(2px)`
+                }
+            }
+            if(leftStickX === -1) {
+                if(previousX.replace(/px/g,'')>=0)
+                {
+                    mario.style.left = `calc(${previousX} - 2px)`
+                }
+            }
+            if(rightStickY === 1) {
+                if(previousY.replace(/px/g,'')<=250) {
+                    mario.style.top= `calc(${previousY} + 2px)`
+                }
+            }
+            if(rightStickY === -1) {
+                if(previousY.replace(/px/g,'')>=-124) {
+                    mario.style.top = `calc(${previousY} - 2px)`
+                }
+            }
+        }
+        function shoot({circle}) {
+            let marioPositionX = cssStyle.getPropertyValue('left')
+            let marioPositionY = cssStyle.getPropertyValue('top')
+            const road = document.getElementsByClassName('road')[0]
+            maxWidth = window.innerWidth;
+            if(circle) {
+                const shot = document.createElement('div');
+                shot.setAttribute('class','bomb');
+                shot.style.left = `calc(${marioPositionX} + 85px)`
+                shot.style.top = `calc(${marioPositionY} + 50px)`
+                road.appendChild(shot)
+                shot.style.opacity = 1
+                requestAnimationFrame(()=>{
+                    shot.style.transform = `translateX(${maxWidth}px)`
+                })
+            }
+        }
+        const normalizeThumbStickAxis = value => {
+            return (2 * value / 0xFF) - 1.0;
+        };
+
+    </script>
+</body>
+
+</html>
